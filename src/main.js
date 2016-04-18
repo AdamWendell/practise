@@ -10,17 +10,34 @@ function intent(DOMSource) {
   return DOMSource.select('textarea').events('input')
     .map(e => e.target.value)
 }
+
 function model(input$, prop$) {
   const initialCode$ = prop$.map(props => props.startText).first()
+  //|S----------------------> initialCode$
+  //|----i----i------i------> input$
+  // concat
+  //|S---i----i------i------> code$
   const code$ = initialCode$.concat(input$)
-  const errorFree$ = code$.map(code => eval(code)).retryWhen(err => err.delay(0)).map(code => {
-    console.log(code);
-    return code})
-  const test$ = Observable
-    .combineLatest(errorFree$, prop$, (code, props) => isEqual(code, props.awnser))
+  //|S---i----i------i------> code$
+  // map running the code in textarea. e= error, res = value of code that ran
+  //|S---e----e-----res----->
+  // retryWhen re= retry
+  //|S---re---re----res----->
+  // map
+  //|S--------------res----->
+  const result$ = code$.map(code => eval(code))
+    .retryWhen(err => err.delay(0))
+    .map(result => result)
 
-  return Observable.combineLatest(test$, prop$, errorFree$,(passingCodeBolean, props, result) => {
-    console.log(passingCodeBolean);
+
+  //|S-----resf---resf----rest->
+  // combineLatest resf = code that should not pass. rest = code that should pass.
+  //|false-----false---false----true->
+  const compared$ = Observable
+    .combineLatest(result$, prop$, (code, props) => isEqual(code, props.awnser))
+
+  // return the state object
+  return Observable.combineLatest(compared$, prop$, result$,(passingCodeBolean, props, result) => {
     return {
       exercise: props.exercise,
       startText: props.startText,
@@ -42,6 +59,7 @@ function view(state$) {
     ])
   )
 }
+
 function Exercise(sources) {
   const input$ = intent(sources.DOM)
   const state$ = model(input$, sources.props)
@@ -52,7 +70,6 @@ function Exercise(sources) {
 }
 
 const IsolatedExercise = (sources) => isolate(Exercise)(sources)
-
 
 function main(sources) {
 
@@ -67,7 +84,7 @@ function main(sources) {
 }
 
 const drivers = {
-  DOM: makeDOMDriver('#main-container'),
+  DOM: makeDOMDriver('#app'),
   props: () => Observable.of(exercises)
 }
 
